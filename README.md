@@ -36,3 +36,8 @@ It works with all the games in my library, except for ToTk.
 Extracted updates are placed in the current directory named as such: `NX_UPDATE_{major}.{minor}.{patch}_{XCI filename}`.
 
 Support is planned for parsing the game title name, id, and version from a given XCI/NSP, but I have yet to find a way to handle that gracefully (without extracting the entire XCI/NSP) due to differences around 4.x.x-5.x.x HOS titles and the Normal/Logo partitions.
+
+# Credits
+- [@SciresM](https://github.com/SciresM) for [hactool](https://github.com/SciresM/hactool) and his work on Atmosphere and early Switch homebrew
+- [Switchbrew](https://switchbrew.org/wiki/Main_Page) team for documenting the switch file formats
+- ChatGPT for creating a struct.Structure to parse the system update version
