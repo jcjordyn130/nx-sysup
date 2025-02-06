@@ -4,6 +4,11 @@ A System Update Extractor for the NX Platform (Nintendo Switch)
 This tools can either parse a version from an extracted update via the system version NCA and can extract
 updates from a given XCI.
 
+# Why did I create this?
+Simple, Nintendo sent DMCA takedown requests to the websites around the web that are hosting firmware dumps and I needed a very specific version of HOS.
+
+So I created this tool to extract them from game dumps, esp launch titles with 1.0.0.
+
 # Features
 - [X] Parsing System Update Version from Extracted Update
 - [X] Extracting Update from XCI
