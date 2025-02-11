@@ -43,8 +43,7 @@ def find_sysver_nca(ext_update_path):
 	for cnt in os.listdir(ext_update_path):
 		# We don't need CNMT files... only the actual archives with RomFSes in them...
 		if not cnt.endswith(".nca") or cnt.endswith(".cnmt.nca"):
-			if debug:
-				print(f"Skipping non-Nintendy archive {cnt}!")
+			debug_print(f"Skipping non-Nintendy archive {cnt}!")
 
 			continue
 
@@ -70,24 +69,22 @@ def grab_nca_titleid(nca):
 
 def extract_nca_romfs(nca):
 	tempdir = tempfile.TemporaryDirectory(prefix = "NX_SYSUP-")
-	if debug:
-		print(f"Extracting {nca} to {tempdir.name}!")
+	debug_print(f"Extracting {nca} to {tempdir.name}!")
 
 	proc = subprocess.run(["hactool", "-x", f"--romfsdir={tempdir.name}", nca], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
 
 	return tempdir
 
 def extract_xci_normallogo(xci):
-    print("Extracting Normal/Logo Partitions... hactool may segfault here!")
+	print("Extracting Normal/Logo Partitions... hactool may segfault here!")
 
 	tempdir = tempfile.TemporaryDirectory(prefix = "NX_SYSUP-")
-	if debug:
-		print(f"Attempting to extract LogoPartition... this may fail")
+	debug_print(f"Attempting to extract LogoPartition... this may fail")
 
 	# Attempt to extract LogoPartition <4.0.0
 	proc = subprocess.run(["hactool", "-x", f"--logodir={tempdir.name}", "-t", "xci", xci], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
 	if len(os.listdir(tempdir.name)) == 0:
-		print(f"DEBUG: LogoPartition extraction resulted in 0 files... trying NormalPartition!")
+		debug_print(f"LogoPartition extraction resulted in 0 files... trying NormalPartition!")
 
 		# Attempt to extract NormalPartition >4.0.0
 		proc = subprocess.run(["hactool", "-x", f"--normaldir={tempdir.name}", "-t", "xci", xci], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
@@ -131,7 +128,7 @@ def parse_cnacp(xci):
 
 	# Find NCA... there should only be one .nca and one .cnmt.nca
 	ncas = [os.path.join(control_nca.name, x) for x in os.listdir(control_nca.name) if x.endswith(".nca") and not x.endswith(".cnmt.nca")]
-	print(f"DEBUG: found {len(ncas)} NCAs from extract_control_xci!")
+	debug_print(f"found {len(ncas)} NCAs from extract_control_xci!")
 
 	if len(ncas) > 1:
 		print(f"ERROR: Number of NCAs in Normal/Logo partition is {len(ncas)} when it should be 1!")
@@ -208,9 +205,13 @@ def parse_name_template(template, sysver, titles):
 		out = out.replace(f"[{key}_publisher]", titles[key][1])
 	print(out)
 
+def debug_print(*args, **kwargs):
+	if debug:
+		print("DEBUG:", *args, **kwargs)
+
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(prog = "NX-SYSUP")
-	parser.add_argument("--debug", help = "Increases logging")
+	parser.add_argument("--debug", help = "Increases logging", action = "store_true")
 	parser.add_argument("--nametemplate", help = "Naming template for updates", default = "NX_UPDATE_[version]_[AmericanEnglish_title]")
 	parser.add_argument("--path-to-hactool", help = "Path to hactool", type = pathlib.Path)
 	parser.add_argument("--from-xci", help = "Path to XCI to extract update from", type = pathlib.Path)
@@ -224,9 +225,8 @@ if __name__ == "__main__":
 		debug = True
 
 	# Add hactool to $PATH if given
-	if args.path_to_hactool:
-		if debug:
-			print("hactool path given... adding to $PATH!")
+	if args.path_to_hactool:	
+		debug_print("hactool path given... adding to $PATH!")
 
 		os.environ["PATH"] += os.pathsep + str(args.path_to_hactool)
 
