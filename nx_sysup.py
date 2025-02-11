@@ -8,6 +8,25 @@ import shutil
 
 sysver_format = "BBBBBBBBH20s40s24s128s" # Thank you ChatGPT... this is the format of the system version file: https://switchbrew.org/wiki/System_Version_Title
 sysver_titleid = "0100000000000809" # TitleID for the system version data archive
+cnacp_title_format = '512s256s'  # Format for a single title
+cnacp_title_langs = [
+	"AmericanEnglish",
+	"BritishEnglish",
+	"Japanese",
+	"French",
+	"German",
+	"LatinAmericanSpanish",
+	"Spanish",
+	"Italian",
+	"Dutch",
+	"CanadianFrench",
+	"Portuguese",
+	"Russian",
+	"Korean",
+	"TraditionalChinese",
+	"SimplifiedChinese",
+] # control.nacp title index to language string
+
 debug = False # Make each function log a lot more
 
 def parse_sysver(sysver_file):
@@ -41,14 +60,96 @@ def find_sysver_nca(ext_update_path):
 
 	return None
 
-def extract_sysver_nca(nca):
+def grab_nca_titleid(nca):
+	proc = subprocess.run(["hactool", "-i", os.path.join(ext_update_path, cnt)], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
+
+	for line in proc.stdout.splitlines():
+		if line.startswith("Title ID:"):
+			# Grab Title ID
+			return line.split(" ")[-1]
+
+def extract_nca_romfs(nca):
 	tempdir = tempfile.TemporaryDirectory(prefix = "NX_SYSUP-")
 	if debug:
 		print(f"Extracting {nca} to {tempdir.name}!")
 
-	subprocess.run(["hactool", "-x", f"--romfsdir={tempdir.name}", nca], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
+	proc = subprocess.run(["hactool", "-x", f"--romfsdir={tempdir.name}", nca], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
+
 	return tempdir
 
+def extract_xci_normallogo(xci):
+    print("Extracting Normal/Logo Partitions... hactool may segfault here!")
+
+	tempdir = tempfile.TemporaryDirectory(prefix = "NX_SYSUP-")
+	if debug:
+		print(f"Attempting to extract LogoPartition... this may fail")
+
+	# Attempt to extract LogoPartition <4.0.0
+	proc = subprocess.run(["hactool", "-x", f"--logodir={tempdir.name}", "-t", "xci", xci], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
+	if len(os.listdir(tempdir.name)) == 0:
+		print(f"DEBUG: LogoPartition extraction resulted in 0 files... trying NormalPartition!")
+
+		# Attempt to extract NormalPartition >4.0.0
+		proc = subprocess.run(["hactool", "-x", f"--normaldir={tempdir.name}", "-t", "xci", xci], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
+		if len(os.listdir(tempdir.name)) == 0:
+			print(f"Failure extracting NormalPartition... this should not happen??? hactool returned {proc.returncode}!")
+
+	return tempdir
+
+def parse_control_nacp(nacp):
+	titles = {}
+	size = struct.calcsize(cnacp_title_format) * 13
+
+	with open(nacp, "rb") as file:
+		for app_name, pub in struct.iter_unpack(cnacp_title_format, file.read(size)):
+			if len(titles) == 13:
+				# Standard only has 13 languages
+				break
+
+			# Strip null bytes
+			app_name = app_name.strip(b"\x00")
+			pub = pub.strip(b"\x00")
+
+			# Decode strings or set to None if they are blank
+			if not app_name:
+				app_name = None
+			else:
+				app_name = app_name.decode()
+
+			if not pub:
+				pub = None
+			else:
+				pub = pub.decode()
+
+			titles.update({cnacp_title_langs[len(titles)]: (app_name, pub)})
+
+	return titles
+
+def parse_cnacp(xci):
+	print("[1/3] Extracting Normal/Logo Partition")
+	control_nca = extract_xci_normallogo(xci)
+
+	# Find NCA... there should only be one .nca and one .cnmt.nca
+	ncas = [os.path.join(control_nca.name, x) for x in os.listdir(control_nca.name) if x.endswith(".nca") and not x.endswith(".cnmt.nca")]
+	print(f"DEBUG: found {len(ncas)} NCAs from extract_control_xci!")
+
+	if len(ncas) > 1:
+		print(f"ERROR: Number of NCAs in Normal/Logo partition is {len(ncas)} when it should be 1!")
+		raise SystemExit(1)
+	elif len(ncas) == 0:
+		print(f"ERROR: No NCAs found in Normal/Logo partition??? huh???")
+		raise SystemExit(1)
+
+	# Extract control.nacp from Control NCA
+	print("[2/3] Extracting control.nacp")
+	control_nacp = extract_nca_romfs(ncas[0])
+
+	# Parse control.nacp
+	print("[3/3] Parsing control.nacp")
+	titles = parse_control_nacp(os.path.join(control_nacp.name, "control.nacp"))
+	print(f"control.nacp successfully parsed.... Title strings: {titles}!")
+
+	return titles
 
 def parse_update(update_path):
 	print("[1/3] Finding sysver NCA...")
@@ -58,45 +159,64 @@ def parse_update(update_path):
 		raise SystemExit(1)
 
 	print("[2/3] Extracting sysver NCA...")
-	temp = extract_sysver_nca(sysver_nca)
+	temp = extract_nca_romfs(sysver_nca)
 
 	print("[3/3] Parsing sysver file...")
 	sysver = parse_sysver(os.path.join(temp.name, "file"))
 
 	print(f"System Update Version: {sysver[0]}.{sysver[1]}.{sysver[2]}")
 
-def extract_update(path):
+def extract_update(path, name):
 	# Extract update from XCI
-	print(f"[1/5] Extracting update from XCI...")
+	print(f"[1/6] Extracting update from XCI...")
 	tempdir = tempfile.TemporaryDirectory(prefix = "NX_SYSUP-")
 	subprocess.run(["hactool", f"--updatedir={tempdir.name}", "-t", "xci", path], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
 
 	# Find the sysver NCA
-	print(f"[2/5] Finding sysver NCA...")
+	print(f"[2/6] Finding sysver NCA...")
 	sysver_nca = find_sysver_nca(tempdir.name)
 	if not sysver_nca:
 		print(f"ERROR: sysver NCA was not found in extracted update from {path}!")
 		raise SystemExit(1)
 
 	# Extract it so we can parse the file
-	print(f"[3/5] Extracting sysver NCA...")
-	sysver_dir = extract_sysver_nca(sysver_nca)
+	print(f"[3/6] Extracting sysver NCA...")
+	sysver_dir = extract_nca_romfs(sysver_nca)
 
 	# Grab the sysver
-	print(f"[4/5] Parsing sysver file...")
+	print(f"[4/6] Parsing sysver file...")
 	sysver = parse_sysver(os.path.join(sysver_dir.name, "file"))
 
+	# Grab control.nacp
+	print(f"[4/6] Parsing control.nacp...")
+	titles = parse_cnacp(path)
+
 	# Final move
-	print(f"[5/5] Moving into properly named directory...")
+	print(f"[5/6] Moving into properly named directory...")
 	shutil.move(tempdir.name, f"NX_UPDATE_{sysver[0]}.{sysver[1]}.{sysver[2]}_{path.stem}")
 	print(f"Update {sysver[0]}.{sysver[1]}.{sysver[2]} from {path.stem} was successfully extracted!")
+
+def parse_name_template(template, sysver, titles):
+	out = template
+
+	# Replace system version (major.minor.patch)
+	out = out.replace("[version]", f"{sysver[0]}.{sysver[1]}.{sysver[2]}")
+
+	# Replace titles and publisher strings in format using official control.nacp language strings
+	for key in titles:
+		out = out.replace(f"[{key}_title]", titles[key][0])
+		out = out.replace(f"[{key}_publisher]", titles[key][1])
+	print(out)
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(prog = "NX-SYSUP")
 	parser.add_argument("--debug", help = "Increases logging")
+	parser.add_argument("--nametemplate", help = "Naming template for updates", default = "NX_UPDATE_[version]_[AmericanEnglish_title]")
 	parser.add_argument("--path-to-hactool", help = "Path to hactool", type = pathlib.Path)
 	parser.add_argument("--from-xci", help = "Path to XCI to extract update from", type = pathlib.Path)
 	parser.add_argument("--parse-update", help = "Path to extracted update to grab version from", type = pathlib.Path)
+	parser.add_argument("--parse-cnacp", help = "Path to XCI to parse control.nacp from", type = pathlib.Path)
+
 	args = parser.parse_args()
 
 	# Set debug logging global if parameter is passed...
@@ -122,7 +242,9 @@ if __name__ == "__main__":
 	if args.parse_update:
 		parse_update(args.parse_update)
 	elif args.from_xci:
-		extract_update(args.from_xci)
+		extract_update(args.from_xci, name = args.nametemplate)
+	elif args.parse_cnacp:
+		parse_cnacp(args.parse_cnacp)
 	else:
-		print(f"ERROR: --from-xci OR --parse-update are required!")
+		print(f"ERROR: --from-xci OR --parse-update OR --parse-cnacp are required!")
 		raise SystemExit(1)
