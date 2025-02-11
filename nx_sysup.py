@@ -123,7 +123,7 @@ def parse_control_nacp(nacp):
 	return titles
 
 def parse_cnacp(xci):
-	print("[1/3] Extracting Normal/Logo Partition")
+	print("Extracting Normal/Logo Partition...")
 	control_nca = extract_xci_normallogo(xci)
 
 	# Find NCA... there should only be one .nca and one .cnmt.nca
@@ -138,11 +138,11 @@ def parse_cnacp(xci):
 		raise SystemExit(1)
 
 	# Extract control.nacp from Control NCA
-	print("[2/3] Extracting control.nacp")
+	print("Extracting control.nacp...")
 	control_nacp = extract_nca_romfs(ncas[0])
 
 	# Parse control.nacp
-	print("[3/3] Parsing control.nacp")
+	print("Parsing control.nacp...")
 	titles = parse_control_nacp(os.path.join(control_nacp.name, "control.nacp"))
 	print(f"control.nacp successfully parsed.... Title strings: {titles}!")
 
@@ -185,13 +185,14 @@ def extract_update(path, name):
 	sysver = parse_sysver(os.path.join(sysver_dir.name, "file"))
 
 	# Grab control.nacp
-	print(f"[4/6] Parsing control.nacp...")
+	print(f"[5/6] Parsing control.nacp...")
 	titles = parse_cnacp(path)
 
 	# Final move
-	print(f"[5/6] Moving into properly named directory...")
-	shutil.move(tempdir.name, f"NX_UPDATE_{sysver[0]}.{sysver[1]}.{sysver[2]}_{path.stem}")
-	print(f"Update {sysver[0]}.{sysver[1]}.{sysver[2]} from {path.stem} was successfully extracted!")
+	print(f"[6/6] Moving into properly named directory...")
+	parsed_name = parse_name_template(name, sysver, titles)
+	shutil.move(tempdir.name, parsed_name)
+	print(f"Update {sysver[0]}.{sysver[1]}.{sysver[2]} from {path.name} was successfully extracted!")
 
 def parse_name_template(template, sysver, titles):
 	out = template
@@ -201,9 +202,16 @@ def parse_name_template(template, sysver, titles):
 
 	# Replace titles and publisher strings in format using official control.nacp language strings
 	for key in titles:
-		out = out.replace(f"[{key}_title]", titles[key][0])
-		out = out.replace(f"[{key}_publisher]", titles[key][1])
-	print(out)
+		# The replaces are wrapped in if statements, as str.replace does not support None to represent a blank string.
+		if titles[key][0]:
+			out = out.replace(f"[{key}_title]", titles[key][0])
+
+		if titles[key][1]:
+			out = out.replace(f"[{key}_publisher]", titles[key][1])
+
+	debug_print(f"Using {out} as an update name from template {template}!")
+
+	return out
 
 def debug_print(*args, **kwargs):
 	if debug:
