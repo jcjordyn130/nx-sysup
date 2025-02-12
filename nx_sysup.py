@@ -50,7 +50,7 @@ def find_sysver_nca(ext_update_path):
 
 			continue
 
-		print(f"Processing NCA {cnt}!")
+		debug_print(f"Processing NCA {cnt}!")
 		titleid = grab_nca_titleid(os.path.join(ext_update_path, cnt))
 		if titleid == sysver_titleid:
 			return os.path.join(ext_update_path, cnt)
@@ -90,7 +90,21 @@ def extract_xci_normallogo(xci):
 			print(f"Failure extracting NormalPartition... this should not happen??? hactool returned {proc.returncode}!")
 		else:
 			debug_print(f"NormalPartition extracted resulted in {len(os.listdir(tempdir.name))} files")
-			
+
+	return tempdir
+
+def extract_xci_update(xci):
+	tempdir = tempfile.TemporaryDirectory(prefix = "NX_SYSUP-")
+	proc = subprocess.run(["hactool", f"--updatedir={tempdir.name}", "-t", "xci", xci], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
+	if proc.returncode > 0:
+		print(f"ERROR: hactool returned {proc.returncode} while extracting update partition!")
+		raise SystemExit(1)
+
+	if len(os.listdir(tempdir.name)) == 0:
+		print(F"ERROR: 0 files were found in extracted update partition yet hactool returned 0")
+		raise SystemExit(1)
+
+	debug_print(f"UpdatePartition extracted with {len(os.listdir(tempdir.name))} files!")
 	return tempdir
 
 def grab_xci_title_metadata(xci):
@@ -197,8 +211,7 @@ def main_parse_update(update_path):
 def main_extract_update(path, name):
 	# Extract update from XCI
 	print(f"[1/6] Extracting update from XCI...")
-	tempdir = tempfile.TemporaryDirectory(prefix = "NX_SYSUP-")
-	subprocess.run(["hactool", f"--updatedir={tempdir.name}", "-t", "xci", path], stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True)
+	tempdir = extract_xci_update(path)
 
 	# Find the sysver NCA
 	print(f"[2/6] Finding sysver NCA...")
