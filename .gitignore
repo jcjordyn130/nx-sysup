@@ -176,3 +176,11 @@ prod.keys
 title.keys
 .switch
 *.keys
+
+# Don't upload Switch title content by mistake
+*.xci
+*.nsp
+*.nca
+
+# Don't upload updates by mistake, even the updates are copyrighted.
+NX_UPDATE_*
