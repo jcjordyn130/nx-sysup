@@ -169,3 +169,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Don't upload Switch keys by mistake
+dev.keys
+prod.keys
+title.keys
+.switch
+*.keys
